@@ -1,4 +1,5 @@
 import PeriodTabs from "@/components/PeriodTabs";
+import RefreshButton from "@/components/RefreshButton";
 import { loadAll } from "@/lib/data";
 import { changePct, dateTimeBR, money, num, pct, ratio } from "@/lib/format";
 import { groupBy, profitByDay, summarize } from "@/lib/metrics";
@@ -105,9 +106,9 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
     <div className="stack">
       <div className="row-between">
         <PeriodTabs range={range} base="/" />
-        <span className="faint">
-          {settings.last_meta_sync_at ? `Meta atualizado em ${dateTimeBR(settings.last_meta_sync_at)}` : "Meta ainda não sincronizado"}
-        </span>
+        <RefreshButton
+          lastSync={settings.last_meta_sync_at ? `Meta atualizado em ${dateTimeBR(settings.last_meta_sync_at)}` : "Meta ainda não sincronizado"}
+        />
       </div>
 
       <div className={`verdict ${verdictClass}`}>
