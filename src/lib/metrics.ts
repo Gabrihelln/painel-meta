@@ -1,5 +1,6 @@
 import type { AdInfo, AdInsight, Sale, Settings } from "./types";
 import { localDate } from "./period";
+import { adStatusKey, type AdStatusKey } from "./adStatus";
 
 export type Level = "campanha" | "conjunto" | "anuncio";
 
@@ -42,6 +43,9 @@ export interface Row extends Totals, Derived {
   adset_id: string | null;
   creative_type: string | null;
   thumbnail_url: string | null;
+  /** Status de entrega no Meta (só no nível anúncio). */
+  ad_status: AdStatusKey | null;
+  ad_status_raw: string | null;
   situation: Situation;
 }
 
@@ -195,6 +199,8 @@ export function groupBy(
       adset_id: m.adset_id,
       creative_type: level === "anuncio" ? info?.creative_type ?? null : null,
       thumbnail_url: level === "anuncio" ? info?.thumbnail_url ?? null : null,
+      ad_status: level === "anuncio" ? adStatusKey(info?.status) : null,
+      ad_status_raw: level === "anuncio" ? info?.status ?? null : null,
       ...g.t,
       ...d,
       situation: situation(g.t, d, settings),

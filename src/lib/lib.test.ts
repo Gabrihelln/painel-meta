@@ -4,6 +4,7 @@ import { cleanToken, parseAccountIds, parseInsightRow, tokenHint } from "./meta"
 import { groupBy, summarize } from "./metrics";
 import { localDate, parsePeriod, startOfLocalDayUtc } from "./period";
 import { normalizeSupabaseUrl } from "./db";
+import { adStatusKey } from "./adStatus";
 import { checkHeaderToken, checkPassword, cleanSecret } from "./auth";
 import { DEFAULT_SETTINGS, type AdInsight, type Sale } from "./types";
 
@@ -159,5 +160,16 @@ describe("login", () => {
     expect(checkHeaderToken("abc", "abc")).toBe(true);
     expect(checkHeaderToken("abd", "abc")).toBe(false);
     expect(checkHeaderToken(null, "abc")).toBe(false);
+  });
+});
+
+describe("status do anúncio", () => {
+  it("traduz o effective_status do Meta", () => {
+    expect(adStatusKey("ACTIVE")).toBe("ativo");
+    expect(adStatusKey("CAMPAIGN_PAUSED")).toBe("pausado");
+    expect(adStatusKey("ADSET_PAUSED")).toBe("pausado");
+    expect(adStatusKey("DISAPPROVED")).toBe("reprovado");
+    expect(adStatusKey("PENDING_REVIEW")).toBe("analise");
+    expect(adStatusKey(null)).toBe("desconhecido");
   });
 });

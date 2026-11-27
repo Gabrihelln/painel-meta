@@ -260,3 +260,5 @@ input[type="date"] {
   .grid-2 { grid-template-columns: 1fr; }
   .tabs a, .btn { padding: 6px 10px; font-size: 13px; }
 }
+
+.small-tabs a { padding: 4px 10px; font-size: 12.5px; }

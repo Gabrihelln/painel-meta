@@ -1,6 +1,7 @@
 import Link from "next/link";
 import MetricsTable, { type Col } from "@/components/MetricsTable";
 import PeriodTabs from "@/components/PeriodTabs";
+import StatusFilter, { parseMostrar } from "@/components/StatusFilter";
 import RefreshButton from "@/components/RefreshButton";
 import { loadAll } from "@/lib/data";
 import { changePct, dateTimeBR, money, num, pct, ratio } from "@/lib/format";
@@ -10,6 +11,7 @@ import { requireSession } from "@/lib/session";
 
 const RESUMO_COLS: Col[] = [
   { key: "name", label: "Criativo", format: "name" },
+  { key: "ad_status", label: "Status", format: "adstatus" },
   { key: "spend", label: "Gasto", format: "money" },
   { key: "sales", label: "Vendas", format: "int" },
   { key: "revenue", label: "Faturamento", format: "money" },
@@ -90,11 +92,18 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
   const allCreatives = groupBy("anuncio", curIns, curSales, ads, settings);
   const creatives = allCreatives.filter((r) => r.spend > 0);
   // tabela do Resumo: criativos com gasto ou venda no período
-  const creativeRows = allCreatives
+  const mostrar = parseMostrar(sp.mostrar);
+  const withData = allCreatives
     .filter((r) => r.spend > 0 || r.sales > 0)
     .map((r) => ({ ...r, show_thumb: true }));
-  const attributedSales = curSales.filter((s) => s.ad_id && creativeRows.some((r) => r.id === s.ad_id));
-  const creativeTotals = summarize(curIns, attributedSales, settings);
+  const activeCount = withData.filter((r) => r.ad_status === "ativo").length;
+  const creativeRows = mostrar === "ativos" ? withData.filter((r) => r.ad_status === "ativo") : withData;
+  const shownIds = new Set(creativeRows.map((r) => r.id));
+  const creativeTotals = summarize(
+    curIns.filter((i) => shownIds.has(i.ad_id)),
+    curSales.filter((s) => s.ad_id && shownIds.has(s.ad_id)),
+    settings,
+  );
   const best = creatives[0];
   const worst = [...creatives].sort((a, b) => a.profit - b.profit)[0];
 
@@ -126,7 +135,7 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
   return (
     <div className="stack">
       <div className="row-between">
-        <PeriodTabs range={range} base="/" />
+        <PeriodTabs range={range} base="/" keep={{ mostrar: mostrar === "ativos" ? "ativos" : undefined }} />
         <RefreshButton
           lastSync={settings.last_meta_sync_at ? `Meta atualizado em ${dateTimeBR(settings.last_meta_sync_at)}` : "Meta ainda não sincronizado"}
         />
@@ -218,7 +227,10 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
 
       <div className="card">
         <div className="row-between" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Como está cada criativo</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <h2 style={{ margin: 0 }}>Como está cada criativo</h2>
+            <StatusFilter href={`/?${range.query}`} current={mostrar} activeCount={activeCount} totalCount={withData.length} />
+          </div>
           <Link href={`/criativos?${range.query}`} className="faint" style={{ textDecoration: "underline" }}>
             Ver funil e mais métricas
           </Link>
@@ -227,7 +239,7 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
           columns={RESUMO_COLS}
           rows={creativeRows}
           totals={creativeTotals}
-          emptyText="Nenhum anúncio com gasto ou venda neste período."
+          emptyText={mostrar === "ativos" ? "Nenhum criativo ativo com gasto ou venda neste período." : "Nenhum anúncio com gasto ou venda neste período."}
         />
       </div>
 

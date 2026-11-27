@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { money, num, pct, ratio } from "@/lib/format";
+import { AD_STATUS_LABEL, AD_STATUS_ORDER, adStatusDetail, type AdStatusKey } from "@/lib/adStatus";
 
-export type ColFormat = "money" | "money2" | "int" | "pct" | "ratio" | "profit" | "situation" | "name";
+export type ColFormat = "money" | "money2" | "int" | "pct" | "ratio" | "profit" | "situation" | "adstatus" | "name";
 
 export interface Col {
   key: string;
@@ -22,6 +23,10 @@ const SIT: Record<string, { label: string; cls: string }> = {
   pausar: { label: "Pausar", cls: "red" },
   aprendendo: { label: "Aprendendo", cls: "gray" },
 };
+const AD_STATUS_CLS: Record<AdStatusKey, string> = {
+  ativo: "blue", pausado: "gray", analise: "amber", reprovado: "red", problema: "red", arquivado: "gray", desconhecido: "gray",
+};
+
 const SIT_ORDER: Record<string, number> = { escalar: 4, bom: 3, atencao: 2, aprendendo: 1, pausar: 0 };
 
 function Cell({ row, col }: { row: R; col: Col }) {
@@ -49,6 +54,14 @@ function Cell({ row, col }: { row: R; col: Col }) {
     case "ratio": return <>{ratio(v)}</>;
     case "profit":
       return <span className={v >= 0 ? "pos" : "neg"}>{money(v)}</span>;
+    case "adstatus": {
+      const k = (v ?? "desconhecido") as AdStatusKey;
+      return (
+        <span className={`pill ${AD_STATUS_CLS[k]}`} title={adStatusDetail(row.ad_status_raw)}>
+          {k === "ativo" ? "● " : ""}{AD_STATUS_LABEL[k]}
+        </span>
+      );
+    }
     case "situation": {
       const s = SIT[v] ?? SIT.aprendendo;
       return <span className={`pill ${s.cls}`}>{s.label}</span>;
@@ -88,6 +101,9 @@ export default function MetricsTable({
       if (col?.format === "situation") {
         x = SIT_ORDER[x] ?? 0;
         y = SIT_ORDER[y] ?? 0;
+      } else if (col?.format === "adstatus") {
+        x = AD_STATUS_ORDER[x as AdStatusKey] ?? 0;
+        y = AD_STATUS_ORDER[y as AdStatusKey] ?? 0;
       }
       if (typeof x === "string" || typeof y === "string") return dir * String(x ?? "").localeCompare(String(y ?? ""), "pt-BR");
       x = x ?? -Infinity;
@@ -145,7 +161,7 @@ export default function MetricsTable({
               <tr>
                 {columns.map((c, i) => (
                   <td key={c.key} className={i === 0 ? "left" : ""}>
-                    {i === 0 ? "Total" : c.format === "situation" || totals[c.key] === undefined ? "" : <Cell row={totals} col={c} />}
+                    {i === 0 ? "Total" : c.format === "situation" || c.format === "adstatus" || totals[c.key] === undefined ? "" : <Cell row={totals} col={c} />}
                   </td>
                 ))}
               </tr>

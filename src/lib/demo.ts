@@ -104,7 +104,8 @@ function build() {
   sales.sort((a, b) => b.created_at.localeCompare(a.created_at));
   const ads: AdInfo[] = ADS.map((a) => ({
     ad_id: a.id, ad_name: a.name, adset_id: `${CAMPAIGNS[a.c].id}-${a.s}`, campaign_id: CAMPAIGNS[a.c].id,
-    status: "ACTIVE", creative_type: a.type, thumbnail_url: null,
+    status: a.id === "1202007" ? "PAUSED" : a.id === "1202008" ? "CAMPAIGN_PAUSED" : "ACTIVE",
+    creative_type: a.type, thumbnail_url: null,
   }));
   cache = { key: today, insights, sales, ads };
   return cache;
