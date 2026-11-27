@@ -75,13 +75,21 @@ export function tokenHint(token: string): string {
   return `token recebido pelo painel: começa com "${token.slice(0, 3)}", ${token.length} caracteres`;
 }
 
+/**
+ * Aceita "act_123", "123", "act=123" (copiado da URL do Gerenciador) ou uma URL inteira.
+ * Várias contas separadas por vírgula, ponto e vírgula ou espaço.
+ */
+export function parseAccountIds(raw: string | undefined): string[] {
+  const ids = (raw ?? "")
+    .split(/[,;\s]+/)
+    .map((s) => s.match(/(\d{6,})/)?.[1])
+    .filter((s): s is string => Boolean(s));
+  return [...new Set(ids)].map((id) => `act_${id}`);
+}
+
 export function metaConfigFromEnv(): MetaConfig | null {
   const token = cleanToken(process.env.META_ACCESS_TOKEN);
-  const accounts = (process.env.META_AD_ACCOUNT_IDS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => (s.startsWith("act_") ? s : `act_${s}`));
+  const accounts = parseAccountIds(process.env.META_AD_ACCOUNT_IDS);
   if (!token || accounts.length === 0) return null;
   return { token, accounts, version: process.env.META_API_VERSION?.trim() || "v24.0" };
 }

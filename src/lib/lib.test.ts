@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { extractAdId, parseWiapyPayload } from "./wiapy";
-import { cleanToken, parseInsightRow, tokenHint } from "./meta";
+import { cleanToken, parseAccountIds, parseInsightRow, tokenHint } from "./meta";
 import { groupBy, summarize } from "./metrics";
 import { localDate, parsePeriod, startOfLocalDayUtc } from "./period";
+import { normalizeSupabaseUrl } from "./db";
 import { DEFAULT_SETTINGS, type AdInsight, type Sale } from "./types";
 
 // Exemplo da documentação da Wiapy (corrigido para JSON válido).
@@ -50,6 +51,13 @@ describe("meta", () => {
     expect(cleanToken('  "EAAabc123"  ')).toBe("EAAabc123");
     expect(cleanToken("META_ACCESS_TOKEN=EAAabc\n123")).toBe("EAAabc123");
     expect(cleanToken("Bearer EAAabc123")).toBe("EAAabc123");
+  });
+
+  it("aceita o id da conta em vários formatos", () => {
+    expect(parseAccountIds("act=1079553007768101")).toEqual(["act_1079553007768101"]);
+    expect(parseAccountIds("act_111111111, 222222222")).toEqual(["act_111111111", "act_222222222"]);
+    expect(parseAccountIds("https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=333333333&nav=x")).toEqual(["act_333333333"]);
+    expect(parseAccountIds("")).toEqual([]);
     expect(tokenHint("EAAabc123")).toContain('"EAA", 9 caracteres');
   });
 
@@ -113,5 +121,14 @@ describe("datas", () => {
     const r = parsePeriod("7d", new Date("2026-11-27T12:00:00Z"));
     expect(r.since).toBe("2026-11-21");
     expect(r.until).toBe("2026-11-27");
+  });
+});
+
+describe("supabase", () => {
+  it("normaliza o endereço do projeto", () => {
+    expect(normalizeSupabaseUrl("https://abcd.supabase.co/rest/v1/")).toBe("https://abcd.supabase.co");
+    expect(normalizeSupabaseUrl(" https://abcd.supabase.co/ ")).toBe("https://abcd.supabase.co");
+    expect(normalizeSupabaseUrl("https://supabase.com/dashboard/project/abcd/settings/api")).toBe("https://abcd.supabase.co");
+    expect(normalizeSupabaseUrl("abcd.supabase.co")).toBe("https://abcd.supabase.co");
   });
 });

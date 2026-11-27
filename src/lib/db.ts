@@ -9,10 +9,26 @@ export function isDemo(): boolean {
   return process.env.DEMO_MODE === "1" || !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 
+/**
+ * Aceita "https://xxx.supabase.co", com "/rest/v1" ou barra no final,
+ * ou o link do painel "https://supabase.com/dashboard/project/xxx".
+ */
+export function normalizeSupabaseUrl(raw: string | undefined): string {
+  const v = (raw ?? "").trim().replace(/^["'`]+|["'`]+$/g, "");
+  if (!v) return "";
+  const dash = v.match(/supabase\.com\/dashboard\/project\/([a-z0-9]+)/i);
+  if (dash) return `https://${dash[1]}.supabase.co`;
+  try {
+    return new URL(v.includes("://") ? v : `https://${v}`).origin;
+  } catch {
+    return v;
+  }
+}
+
 export function db(): SupabaseClient {
   if (!client) {
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const url = normalizeSupabaseUrl(process.env.SUPABASE_URL);
+    const key = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim().replace(/^["'`]+|["'`]+$/g, "");
     if (!url || !key) throw new Error("SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY não configurados");
     client = createClient(url, key, { auth: { persistSession: false } });
   }
@@ -28,7 +44,7 @@ async function selectAll<T>(build: (from: number, to: number) => PromiseLike<{ d
   const out: T[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await build(from, from + PAGE - 1);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(`Supabase: ${error.message}`);
     out.push(...(data ?? []));
     if (!data || data.length < PAGE) break;
   }
@@ -58,7 +74,7 @@ export async function getAds(): Promise<AdInfo[]> {
 
 export async function getSettings(): Promise<Settings> {
   const { data, error } = await db().from("settings").select("*").eq("id", 1).maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(`Supabase: ${error.message}`);
   if (!data) return DEFAULT_SETTINGS;
   return {
     tax_percent: Number(data.tax_percent),
@@ -74,16 +90,16 @@ export async function getSettings(): Promise<Settings> {
 
 export async function saveSettings(s: Partial<Settings>) {
   const { error } = await db().from("settings").upsert({ id: 1, ...s });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(`Supabase: ${error.message}`);
 }
 
 /** Grava a venda, sem deixar um aviso antigo sobrescrever um mais novo. */
 export async function upsertSale(sale: Sale, raw: unknown): Promise<"inserted" | "updated" | "stale"> {
   const { data: existing, error: e1 } = await db().from("sales").select("updated_at").eq("id", sale.id).maybeSingle();
-  if (e1) throw new Error(e1.message);
+  if (e1) throw new Error(`Supabase: ${e1.message}`);
   if (existing && Date.parse(existing.updated_at) > Date.parse(sale.updated_at)) return "stale";
   const { error } = await db().from("sales").upsert({ ...sale, raw, received_at: new Date().toISOString() });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(`Supabase: ${error.message}`);
   return existing ? "updated" : "inserted";
 }
 
@@ -91,7 +107,7 @@ export async function upsertInsights(rows: AdInsight[]) {
   for (let i = 0; i < rows.length; i += 500) {
     const chunk = rows.slice(i, i + 500).map((r) => ({ ...r, updated_at: new Date().toISOString() }));
     const { error } = await db().from("ad_insights").upsert(chunk, { onConflict: "date,ad_id" });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(`Supabase: ${error.message}`);
   }
 }
 
@@ -99,7 +115,7 @@ export async function upsertAds(rows: AdInfo[]) {
   for (let i = 0; i < rows.length; i += 500) {
     const chunk = rows.slice(i, i + 500).map((r) => ({ ...r, updated_at: new Date().toISOString() }));
     const { error } = await db().from("ads").upsert(chunk, { onConflict: "ad_id" });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(`Supabase: ${error.message}`);
   }
 }
 
