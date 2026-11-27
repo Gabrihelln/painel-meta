@@ -146,6 +146,21 @@ Ele guarda as UTMs do anúncio e as acrescenta aos links do checkout. Se o seu c
 
 ---
 
+## Importar vendas antigas (planilha da Wiapy)
+
+O webhook só traz vendas novas. Para trazer o histórico, exporte as vendas da Wiapy em Excel e rode, na pasta do projeto:
+
+```
+python scripts/xlsx_para_json.py "C:\caminho\da\planilha.xlsx" > importar\vendas.json
+node --env-file=.env scripts/importar-wiapy.mjs importar\vendas.json
+node --env-file=.env scripts/importar-wiapy.mjs importar\vendas.json --gravar
+```
+
+- O segundo comando só **simula** e mostra quantas vendas pagas vão entrar. O terceiro grava.
+- Só vendas **pagas** são importadas. Vendas que já estão no banco não são alteradas, então dá para rodar de novo sem duplicar.
+- A planilha não tem UTM, então essas vendas aparecem como "Sem rastreio".
+- A pasta `importar/` fica fora do Git (tem dados de clientes). Apague a planilha e o JSON depois de importar.
+
 ## Rodar no seu PC
 
 ```
