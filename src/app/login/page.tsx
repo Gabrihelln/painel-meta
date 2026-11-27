@@ -10,7 +10,11 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           Senha
           <input type="password" name="senha" autoFocus required autoComplete="current-password" />
         </label>
-        {erro ? <p className="err-msg">Senha incorreta. Tente de novo.</p> : null}
+        {erro === "sem-senha" ? (
+          <p className="err-msg">A variável PAINEL_SENHA não está configurada no servidor. Cadastre-a na Vercel e faça Redeploy.</p>
+        ) : erro ? (
+          <p className="err-msg">Senha incorreta. Tente de novo.</p>
+        ) : null}
         <button className="btn btn-primary" type="submit" style={{ justifyContent: "center" }}>Entrar</button>
       </form>
     </main>

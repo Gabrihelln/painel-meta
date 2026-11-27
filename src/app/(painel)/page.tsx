@@ -2,10 +2,30 @@ import PeriodTabs from "@/components/PeriodTabs";
 import { loadAll } from "@/lib/data";
 import { changePct, dateTimeBR, money, num, pct, ratio } from "@/lib/format";
 import { groupBy, profitByDay, summarize } from "@/lib/metrics";
-import { addDays, daysBetween, listDays, localDate, parsePeriod, previousRange, sameTimeYesterdayMs, shortDayLabel } from "@/lib/period";
+import { ALL_SINCE, addDays, daysBetween, listDays, localDate, parsePeriod, previousRange, sameTimeYesterdayMs, shortDayLabel } from "@/lib/period";
 import { requireSession } from "@/lib/session";
 
-function Change({ now, before, invert = false, label = "vs período anterior" }: { now: number; before: number; invert?: boolean; label?: string }) {
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+function byMonth(days: { date: string; profit: number; revenue: number; spend: number; sales: number }[]) {
+  const map = new Map<string, { key: string; label: string; profit: number; revenue: number; spend: number; sales: number }>();
+  for (const d of days) {
+    const key = d.date.slice(0, 7);
+    let m = map.get(key);
+    if (!m) {
+      m = { key, label: `${MONTHS[Number(key.slice(5, 7)) - 1]}/${key.slice(2, 4)}`, profit: 0, revenue: 0, spend: 0, sales: 0 };
+      map.set(key, m);
+    }
+    m.profit += d.profit;
+    m.revenue += d.revenue;
+    m.spend += d.spend;
+    m.sales += d.sales;
+  }
+  return [...map.values()];
+}
+
+function Change({ now, before, invert = false, label = "vs período anterior" }: { now: number; before: number | undefined; invert?: boolean; label?: string }) {
+  if (before === undefined) return <span className="sub">desde o início</span>;
   const c = changePct(now, before);
   if (c === null) return <span className="sub">sem comparação</span>;
   const good = invert ? c <= 0 : c >= 0;
@@ -19,29 +39,33 @@ function Change({ now, before, invert = false, label = "vs período anterior" }:
 export default async function ResumoPage({ searchParams }: PageProps<"/">) {
   await requireSession();
   const sp = await searchParams;
-  const range = parsePeriod(sp.periodo);
-  const prev = previousRange(range);
+  const range = parsePeriod(sp);
+  const isAll = range.key === "todos";
+  const prev = isAll ? null : previousRange(range);
   const today = localDate(new Date());
 
-  // gráfico: pelo menos 7 dias, no máximo 31
-  const n = Math.min(31, Math.max(7, daysBetween(range.since, range.until)));
-  const chartSince = addDays(range.until, -(n - 1));
-  const fetchSince = [prev.since, chartSince].sort()[0];
+  // "Todos" busca tudo; os outros períodos buscam também o período anterior (comparação)
+  // e pelo menos 7 dias para o gráfico.
+  const minChartSince = addDays(range.until, -6);
+  const fetchSince = isAll ? ALL_SINCE : [prev!.since, range.since, minChartSince].sort()[0];
 
   const { sales, insights, ads, settings } = await loadAll(fetchSince, range.until);
   const inRange = (d: string, a: string, b: string) => d >= a && d <= b;
   const curSales = sales.filter((s) => inRange(localDate(s.created_at), range.since, range.until));
-  // "Hoje" compara com ontem até a mesma hora (vendas). O gasto do Meta vem por dia inteiro.
-  const sameTimeYesterday = sameTimeYesterdayMs();
-  const prevSales = sales.filter(
-    (s) => inRange(localDate(s.created_at), prev.since, prev.until) &&
-      (range.key !== "hoje" || Date.parse(s.created_at) <= sameTimeYesterday),
-  );
   const curIns = insights.filter((i) => inRange(i.date, range.since, range.until));
-  const prevIns = insights.filter((i) => inRange(i.date, prev.since, prev.until));
-
   const cur = summarize(curIns, curSales, settings);
-  const before = summarize(prevIns, prevSales, settings);
+
+  let before: ReturnType<typeof summarize> | null = null;
+  if (prev) {
+    // "Hoje" compara com ontem até a mesma hora (vendas). O gasto do Meta vem por dia inteiro.
+    const sameTimeYesterday = sameTimeYesterdayMs();
+    const prevSales = sales.filter(
+      (s) => inRange(localDate(s.created_at), prev.since, prev.until) &&
+        (range.key !== "hoje" || Date.parse(s.created_at) <= sameTimeYesterday),
+    );
+    const prevIns = insights.filter((i) => inRange(i.date, prev.since, prev.until));
+    before = summarize(prevIns, prevSales, settings);
+  }
 
   const pending = curSales.filter((s) => s.status === "unpaid");
   const pendingValue = pending.reduce((a, s) => a + s.amount_cents / 100, 0);
@@ -52,19 +76,35 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
   const best = creatives[0];
   const worst = [...creatives].sort((a, b) => a.profit - b.profit)[0];
 
-  const days = profitByDay(listDays(chartSince, range.until), insights, sales, settings);
-  const maxAbs = Math.max(1, ...days.map((d) => Math.abs(d.profit)));
-  const hasNeg = days.some((d) => d.profit < 0);
+  // gráfico: do início do período (em "Todos", do primeiro dado existente), mínimo 7 dias;
+  // acima de 62 dias agrupa por mês.
+  const firstData = [
+    ...sales.map((s) => localDate(s.created_at)),
+    ...insights.map((i) => i.date),
+  ].reduce((a, b) => (b < a ? b : a), range.until);
+  const chartStart = [isAll ? firstData : range.since, minChartSince].sort()[0];
+  const daily = profitByDay(listDays(chartStart, range.until), insights, sales, settings);
+  const monthly = daily.length > 62;
+  const bars = monthly ? byMonth(daily) : daily.map((d) => ({ ...d, key: d.date, label: shortDayLabel(d.date, today) }));
+  const maxAbs = Math.max(1, ...bars.map((d) => Math.abs(d.profit)));
+  const hasNeg = bars.some((d) => d.profit < 0);
   const posH = hasNeg ? 110 : 150;
   const negH = hasNeg ? 40 : 0;
+  const labelEvery = bars.length > 14 ? Math.ceil(bars.length / 10) : 1;
 
-  const periodWord = range.key === "hoje" ? "hoje" : range.key === "ontem" ? "ontem" : `nos últimos ${daysBetween(range.since, range.until)} dias`;
+  const periodWord =
+    range.key === "hoje" ? "hoje"
+    : range.key === "ontem" ? "ontem"
+    : range.key === "mes" ? "este mês"
+    : isAll ? "no total"
+    : range.key === "personalizado" ? (range.since === range.until ? `em ${range.label}` : `de ${range.label}`)
+    : `nos últimos ${daysBetween(range.since, range.until)} dias`;
   const verdictClass = cur.spend === 0 && cur.sales === 0 ? "neutral" : cur.profit >= 0 ? "good" : "bad";
 
   return (
     <div className="stack">
       <div className="row-between">
-        <PeriodTabs current={range.key} base="/" />
+        <PeriodTabs range={range} base="/" />
         <span className="faint">
           {settings.last_meta_sync_at ? `Meta atualizado em ${dateTimeBR(settings.last_meta_sync_at)}` : "Meta ainda não sincronizado"}
         </span>
@@ -94,14 +134,14 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
         <div className="kpi">
           <p className="lb">Faturamento</p>
           <p className="vl">{money(cur.revenue)}</p>
-          <Change now={cur.revenue} before={before.revenue} label={range.key === "hoje" ? "vs ontem até esta hora" : undefined} />
+          <Change now={cur.revenue} before={before?.revenue} label={range.key === "hoje" ? "vs ontem até esta hora" : undefined} />
         </div>
         <div className="kpi">
           <p className="lb">Gasto em anúncios</p>
           <p className="vl">{money(cur.spend)}</p>
-          {range.key === "hoje"
+          {range.key === "hoje" && before
             ? <span className="sub">ontem inteiro: {money(before.spend)}</span>
-            : <Change now={cur.spend} before={before.spend} invert />}
+            : <Change now={cur.spend} before={before?.spend} invert />}
         </div>
         <div className="kpi">
           <p className="lb">Lucro</p>
@@ -127,12 +167,12 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
 
       <div className="card">
         <div className="row-between" style={{ marginBottom: 12 }}>
-          <h2 style={{ margin: 0 }}>Lucro por dia</h2>
+          <h2 style={{ margin: 0 }}>{monthly ? "Lucro por mês" : "Lucro por dia"}</h2>
           <span className="faint">Verde: lucro · Vermelho: prejuízo</span>
         </div>
         <div className="bars" style={{ height: posH + negH + 1 }}>
-          {days.map((d) => (
-            <div className="bar-col" key={d.date} title={`${d.date}: lucro ${money(d.profit)} · faturamento ${money(d.revenue)} · gasto ${money(d.spend)} · ${d.sales} vendas`}>
+          {bars.map((d) => (
+            <div className="bar-col" key={d.key} title={`${d.label}: lucro ${money(d.profit)} · faturamento ${money(d.revenue)} · gasto ${money(d.spend)} · ${d.sales} vendas`}>
               <div className="bar-pos-zone" style={{ height: posH }}>
                 {d.profit >= 0 ? <div className="bar" style={{ height: Math.max(2, (d.profit / maxAbs) * posH) }} /> : null}
               </div>
@@ -146,9 +186,9 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
           ))}
         </div>
         <div className="bar-labels">
-          {days.map((d, i) => (
-            <span key={d.date} className={d.profit < 0 ? "neg" : ""}>
-              {n > 14 && i % 3 !== 0 && d.date !== today ? "" : shortDayLabel(d.date, today)}
+          {bars.map((d, i) => (
+            <span key={d.key} className={d.profit < 0 ? "neg" : ""}>
+              {i % labelEvery === 0 || i === bars.length - 1 ? d.label : ""}
             </span>
           ))}
         </div>

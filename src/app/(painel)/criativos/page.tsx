@@ -23,7 +23,7 @@ const COLS: Col[] = [
 export default async function CriativosPage({ searchParams }: PageProps<"/criativos">) {
   await requireSession();
   const sp = await searchParams;
-  const range = parsePeriod(sp.periodo);
+  const range = parsePeriod(sp);
   const campanha = (Array.isArray(sp.campanha) ? sp.campanha[0] : sp.campanha) ?? "";
 
   const { sales, insights, ads, settings } = await loadAll(range.since, range.until);
@@ -39,11 +39,11 @@ export default async function CriativosPage({ searchParams }: PageProps<"/criati
   return (
     <div className="stack">
       <div className="row-between">
-        <PeriodTabs current={range.key} base="/criativos" keep={{ campanha: campanha || undefined }} />
+        <PeriodTabs range={range} base="/criativos" keep={{ campanha: campanha || undefined }} />
         <CampaignSelect
           options={[...campaigns].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))}
           value={campanha}
-          base={`/criativos?periodo=${range.key}`}
+          base={`/criativos?${range.query}`}
         />
       </div>
       <div className="card">

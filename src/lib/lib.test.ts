@@ -4,6 +4,7 @@ import { cleanToken, parseAccountIds, parseInsightRow, tokenHint } from "./meta"
 import { groupBy, summarize } from "./metrics";
 import { localDate, parsePeriod, startOfLocalDayUtc } from "./period";
 import { normalizeSupabaseUrl } from "./db";
+import { checkHeaderToken, checkPassword, cleanSecret } from "./auth";
 import { DEFAULT_SETTINGS, type AdInsight, type Sale } from "./types";
 
 // Exemplo da documentação da Wiapy (corrigido para JSON válido).
@@ -118,9 +119,18 @@ describe("datas", () => {
   it("usa o fuso de São Paulo", () => {
     expect(localDate("2026-11-28T02:30:00Z")).toBe("2026-11-27");
     expect(startOfLocalDayUtc("2026-11-27")).toBe("2026-11-27T03:00:00.000Z");
-    const r = parsePeriod("7d", new Date("2026-11-27T12:00:00Z"));
+    const r = parsePeriod({ periodo: "7d" }, new Date("2026-11-27T12:00:00Z"));
     expect(r.since).toBe("2026-11-21");
     expect(r.until).toBe("2026-11-27");
+    const now = new Date("2026-11-27T12:00:00Z");
+    const all = parsePeriod({ periodo: "todos" }, now);
+    expect(all.since).toBe("2000-01-01");
+    expect(all.until).toBe("2026-11-27");
+    const c = parsePeriod({ periodo: "personalizado", de: "2026-11-20", ate: "2026-11-05" }, now);
+    expect([c.since, c.until]).toEqual(["2026-11-05", "2026-11-20"]);
+    expect(c.label).toBe("05/11/2026 a 20/11/2026");
+    expect(c.query).toBe("periodo=personalizado&de=2026-11-05&ate=2026-11-20");
+    expect(parsePeriod({ periodo: "personalizado", de: "lixo" }, now).key).toBe("hoje");
   });
 });
 
@@ -130,5 +140,24 @@ describe("supabase", () => {
     expect(normalizeSupabaseUrl(" https://abcd.supabase.co/ ")).toBe("https://abcd.supabase.co");
     expect(normalizeSupabaseUrl("https://supabase.com/dashboard/project/abcd/settings/api")).toBe("https://abcd.supabase.co");
     expect(normalizeSupabaseUrl("abcd.supabase.co")).toBe("https://abcd.supabase.co");
+  });
+});
+
+describe("login", () => {
+  it("ignora aspas e espaços em volta da senha", () => {
+    process.env.PAINEL_SENHA = ' "Minha Senha#1" ';
+    expect(cleanSecret(process.env.PAINEL_SENHA)).toBe("Minha Senha#1");
+    expect(checkPassword("Minha Senha#1")).toBe(true);
+    expect(checkPassword("Minha Senha#1 ")).toBe(true);
+    expect(checkPassword("minha senha#1")).toBe(false);
+    delete process.env.PAINEL_SENHA;
+    expect(checkPassword("qualquer")).toBe(false);
+  });
+
+  it("confere tokens de header", () => {
+    expect(checkHeaderToken("Bearer abc", '"abc"')).toBe(true);
+    expect(checkHeaderToken("abc", "abc")).toBe(true);
+    expect(checkHeaderToken("abd", "abc")).toBe(false);
+    expect(checkHeaderToken(null, "abc")).toBe(false);
   });
 });

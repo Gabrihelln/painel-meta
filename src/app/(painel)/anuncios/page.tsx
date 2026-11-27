@@ -32,7 +32,7 @@ function one(v: string | string[] | undefined) {
 export default async function AnunciosPage({ searchParams }: PageProps<"/anuncios">) {
   await requireSession();
   const sp = await searchParams;
-  const range = parsePeriod(sp.periodo);
+  const range = parsePeriod(sp);
   const level = (LEVELS.find((l) => l.key === one(sp.nivel))?.key ?? "campanha") as Level;
   const campanha = one(sp.campanha);
   const conjunto = one(sp.conjunto);
@@ -55,20 +55,20 @@ export default async function AnunciosPage({ searchParams }: PageProps<"/anuncio
   const setName = conjunto ? insights.find((i) => i.adset_id === conjunto)?.adset_name : null;
   const keep = { nivel: level, campanha, conjunto };
   const next =
-    level === "campanha" ? `/anuncios?periodo=${range.key}&nivel=conjunto&campanha={id}`
-    : level === "conjunto" ? `/anuncios?periodo=${range.key}&nivel=anuncio${campanha ? `&campanha=${campanha}` : ""}&conjunto={id}`
+    level === "campanha" ? `/anuncios?${range.query}&nivel=conjunto&campanha={id}`
+    : level === "conjunto" ? `/anuncios?${range.query}&nivel=anuncio${campanha ? `&campanha=${campanha}` : ""}&conjunto={id}`
     : undefined;
 
   return (
     <div className="stack">
       <div className="row-between">
-        <PeriodTabs current={range.key} base="/anuncios" keep={keep} />
+        <PeriodTabs range={range} base="/anuncios" keep={keep} />
       </div>
       <div className="card">
         <div className="row-between" style={{ marginBottom: 10 }}>
           <div className="tabs">
             {LEVELS.map((l) => (
-              <Link key={l.key} href={`/anuncios?periodo=${range.key}&nivel=${l.key}`} className={l.key === level && !campanha && !conjunto ? "on" : l.key === level ? "on" : ""}>
+              <Link key={l.key} href={`/anuncios?${range.query}&nivel=${l.key}`} className={l.key === level && !campanha && !conjunto ? "on" : l.key === level ? "on" : ""}>
                 {l.label}
               </Link>
             ))}
@@ -77,7 +77,7 @@ export default async function AnunciosPage({ searchParams }: PageProps<"/anuncio
             {campName || setName ? (
               <>
                 Filtrando: {[campName, setName].filter(Boolean).join(" › ")} ·{" "}
-                <Link href={`/anuncios?periodo=${range.key}&nivel=${level}`} style={{ textDecoration: "underline" }}>limpar</Link>
+                <Link href={`/anuncios?${range.query}&nivel=${level}`} style={{ textDecoration: "underline" }}>limpar</Link>
               </>
             ) : next ? "Clique numa linha para abrir o próximo nível" : `${range.label} · ordenado por lucro`}
           </span>

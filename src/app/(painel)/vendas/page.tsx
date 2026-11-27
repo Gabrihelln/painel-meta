@@ -27,7 +27,7 @@ const LIMIT = 300;
 export default async function VendasPage({ searchParams }: PageProps<"/vendas">) {
   await requireSession();
   const sp = await searchParams;
-  const range = parsePeriod(sp.periodo);
+  const range = parsePeriod(sp);
   const fKey = (Array.isArray(sp.status) ? sp.status[0] : sp.status) ?? "todas";
   const filter = FILTERS.find((f) => f.key === fKey) ?? FILTERS[0];
 
@@ -43,12 +43,12 @@ export default async function VendasPage({ searchParams }: PageProps<"/vendas">)
   return (
     <div className="stack">
       <div className="row-between">
-        <PeriodTabs current={range.key} base="/vendas" keep={{ status: fKey }} />
+        <PeriodTabs range={range} base="/vendas" keep={{ status: fKey }} />
       </div>
       <div className="card">
         <div className="tabs" style={{ marginBottom: 10 }}>
           {FILTERS.map((f) => (
-            <Link key={f.key} href={`/vendas?periodo=${range.key}&status=${f.key}`} className={f.key === filter.key ? "on" : ""}>
+            <Link key={f.key} href={`/vendas?${range.query}&status=${f.key}`} className={f.key === filter.key ? "on" : ""}>
               {f.label} ({counts[f.key]})
             </Link>
           ))}

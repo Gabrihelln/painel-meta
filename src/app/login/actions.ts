@@ -2,12 +2,11 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { SESSION_COOKIE, safeEqual, sessionToken } from "@/lib/auth";
+import { SESSION_COOKIE, checkPassword, passwordRequired, sessionToken } from "@/lib/auth";
 
 export async function login(formData: FormData) {
-  const senha = String(formData.get("senha") ?? "");
-  const expected = process.env.PAINEL_SENHA ?? "";
-  if (!expected || !safeEqual(senha, expected)) redirect("/login?erro=1");
+  if (!passwordRequired()) redirect("/login?erro=sem-senha");
+  if (!checkPassword(String(formData.get("senha") ?? ""))) redirect("/login?erro=1");
   (await cookies()).set(SESSION_COOKIE, sessionToken(), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

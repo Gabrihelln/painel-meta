@@ -14,12 +14,18 @@ const ITEMS = [
 export default function Nav() {
   const path = usePathname();
   const params = useSearchParams();
-  const periodo = params.get("periodo");
+  // mantém o período escolhido ao trocar de aba
+  const keep = new URLSearchParams();
+  for (const k of ["periodo", "de", "ate"]) {
+    const v = params.get(k);
+    if (v) keep.set(k, v);
+  }
+  const qs = keep.toString();
   return (
     <nav className="nav">
       {ITEMS.map((it) => {
         const on = it.href === "/" ? path === "/" : path.startsWith(it.href);
-        const href = periodo && it.href !== "/configuracoes" ? `${it.href}?periodo=${periodo}` : it.href;
+        const href = qs && it.href !== "/configuracoes" ? `${it.href}?${qs}` : it.href;
         return (
           <Link key={it.href} href={href} className={on ? "on" : ""}>
             {it.label}
