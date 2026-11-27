@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { isDemo, storeSettings } from "@/lib/data";
+import { isDemo, storePagesData, storeSettings } from "@/lib/data";
 import { requireSession } from "@/lib/session";
 import { syncMeta } from "@/lib/sync";
 
@@ -36,4 +36,31 @@ export async function syncNowAction(formData: FormData) {
   const dias = n(formData.get("dias"), 7);
   const r = await syncMeta(dias);
   redirect(r.ok ? `/configuracoes?sync=ok&n=${r.insights}` : `/configuracoes?sync=erro`);
+}
+
+/** Salva nomes das páginas, junções e ligação produto → página. */
+export async function savePagesAction(formData: FormData) {
+  await requireSession();
+  const pages: { key: string; name: string | null; merge_into: string | null }[] = [];
+  const productPages: { product: string; page_key: string }[] = [];
+  const cleared: string[] = [];
+  for (let i = 0; formData.has(`page_key_${i}`); i++) {
+    const key = String(formData.get(`page_key_${i}`));
+    const name = String(formData.get(`page_name_${i}`) ?? "").trim() || null;
+    const merge = String(formData.get(`page_merge_${i}`) ?? "").trim();
+    pages.push({ key, name, merge_into: merge && merge !== key ? merge : null });
+  }
+  for (let i = 0; formData.has(`prod_${i}`); i++) {
+    const product = String(formData.get(`prod_${i}`));
+    const page = String(formData.get(`prod_page_${i}`) ?? "").trim();
+    if (page) productPages.push({ product, page_key: page });
+    else cleared.push(product);
+  }
+  try {
+    await storePagesData(pages, productPages, cleared);
+  } catch (e) {
+    console.error("salvar páginas:", e);
+    redirect("/configuracoes?erro=paginas#paginas");
+  }
+  redirect("/configuracoes?paginas=1#paginas");
 }

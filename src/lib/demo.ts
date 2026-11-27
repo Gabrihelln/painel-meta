@@ -106,6 +106,9 @@ function build() {
     ad_id: a.id, ad_name: a.name, adset_id: `${CAMPAIGNS[a.c].id}-${a.s}`, campaign_id: CAMPAIGNS[a.c].id,
     status: a.id === "1202007" ? "PAUSED" : a.id === "1202008" ? "CAMPAIGN_PAUSED" : "ACTIVE",
     creative_type: a.type, thumbnail_url: null,
+    link_url: a.c <= 1 || a.c === 2
+      ? "https://www.meusite.com/oferta-principal?utm_source=meta"
+      : "https://meusite.com/oferta-2/",
   }));
   cache = { key: today, insights, sales, ads };
   return cache;

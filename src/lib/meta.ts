@@ -1,4 +1,5 @@
 import type { AdInfo, AdInsight } from "./types";
+import { extractCreativeLink } from "./pages";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -53,6 +54,7 @@ export function parseAdRow(r: any): AdInfo {
     status: r.effective_status ?? null,
     creative_type: type,
     thumbnail_url: c.thumbnail_url ?? c.image_url ?? null,
+    link_url: extractCreativeLink(c),
   };
 }
 
@@ -131,13 +133,19 @@ export async function fetchInsights(cfg: MetaConfig, since: string, until: strin
 
 export async function fetchAds(cfg: MetaConfig): Promise<AdInfo[]> {
   const out: AdInfo[] = [];
+  const FULL = "id,name,effective_status,adset_id,campaign_id,creative{thumbnail_url,image_url,object_type,video_id,link_url,object_story_spec,asset_feed_spec{link_urls}}";
+  const BASIC = "id,name,effective_status,adset_id,campaign_id,creative{thumbnail_url,image_url,object_type,video_id}";
   for (const acc of cfg.accounts) {
-    const params = new URLSearchParams({
-      fields: "id,name,effective_status,adset_id,campaign_id,creative{thumbnail_url,image_url,object_type,video_id}",
-      limit: "200",
-      access_token: cfg.token,
-    });
-    const data = await getAllPages(`https://graph.facebook.com/${cfg.version}/${acc}/ads?${params}`, cfg.token);
+    const url = (fields: string) =>
+      `https://graph.facebook.com/${cfg.version}/${acc}/ads?${new URLSearchParams({ fields, limit: "200", access_token: cfg.token })}`;
+    let data: any[];
+    try {
+      data = await getAllPages(url(FULL), cfg.token);
+    } catch (e) {
+      // se o Meta recusar os campos do link de destino, segue sem eles (sem quebrar a sincronização)
+      console.warn("Meta ads: buscando sem link de destino:", e instanceof Error ? e.message : e);
+      data = await getAllPages(url(BASIC), cfg.token);
+    }
     out.push(...data.map(parseAdRow));
   }
   return out;

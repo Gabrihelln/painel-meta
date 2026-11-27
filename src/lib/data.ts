@@ -1,6 +1,7 @@
 import * as store from "./db";
 import { demoAds, demoInsights, demoSales } from "./demo";
 import type { AdInfo, AdInsight, Sale, Settings } from "./types";
+import type { PageInfo, ProductPage } from "./pages";
 import { DEFAULT_SETTINGS } from "./types";
 
 // Escolhe entre banco real e dados de exemplo.
@@ -30,6 +31,36 @@ export async function storeSettings(s: Partial<Settings>) {
     return;
   }
   await store.saveSettings(s);
+}
+
+let demoPages: PageInfo[] = [
+  { key: "meusite.com/oferta-principal", name: "Oferta principal", merge_into: null },
+  { key: "meusite.com/oferta-2", name: "Oferta 2", merge_into: null },
+];
+let demoProductPages: ProductPage[] = [];
+
+export async function loadPagesData(): Promise<store.PagesData> {
+  if (isDemo()) return { pages: demoPages, productPages: demoProductPages, needsMigration: false };
+  return store.getPagesData();
+}
+
+export async function storePagesData(pages: PageInfo[], productPages: ProductPage[], cleared: string[]) {
+  if (isDemo()) {
+    const byKey = new Map(demoPages.map((p) => [p.key, p]));
+    for (const p of pages) byKey.set(p.key, p);
+    demoPages = [...byKey.values()];
+    const byProd = new Map(demoProductPages.map((p) => [p.product, p]));
+    for (const p of productPages) byProd.set(p.product, p);
+    for (const c of cleared) byProd.delete(c);
+    demoProductPages = [...byProd.values()];
+    return;
+  }
+  await store.savePagesData(pages, productPages, cleared);
+}
+
+export async function loadProductNames(): Promise<string[]> {
+  if (isDemo()) return ["Método Exemplo"];
+  return store.getProductNames();
 }
 
 export async function loadAll(since: string, until: string) {

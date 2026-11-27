@@ -1,10 +1,11 @@
 import { headers } from "next/headers";
-import { isDemo, loadSales, loadSettings } from "@/lib/data";
+import { isDemo, loadAds, loadPagesData, loadProductNames, loadSales, loadSettings } from "@/lib/data";
+import { normalizePageUrl } from "@/lib/pages";
 import { dateTimeBR, money, pct } from "@/lib/format";
 import { metaConfigFromEnv } from "@/lib/meta";
 import { addDays, localDate } from "@/lib/period";
 import { requireSession } from "@/lib/session";
-import { saveSettingsAction, syncNowAction } from "./actions";
+import { savePagesAction, saveSettingsAction, syncNowAction } from "./actions";
 
 function Status({ ok, warn, children }: { ok: boolean; warn?: boolean; children: React.ReactNode }) {
   return <p className={`small ${ok ? (warn ? "warn" : "pos") : "neg"}`} style={{ marginTop: 4 }}>{children}</p>;
@@ -36,6 +37,18 @@ export default async function ConfigPage({ searchParams }: PageProps<"/configura
     `venda de ${money(ex.venda)} − taxa Wiapy ${money(ex.taxa)} − imposto ${money(exImposto)} − custo fixo ${money(exFixo)}` +
     ` − anúncio ${money(ex.anuncio)} − imposto/IOF do anúncio ${money(exAdTax)} = lucro ${money(exLucro)} (ROI ${pct(exRoi, 0)}).`;
 
+  // páginas de venda: endereços detectados nos anúncios + os já salvos
+  const [ads, pagesData, productNames] = await Promise.all([loadAds(), loadPagesData(), loadProductNames()]);
+  const pageInfo = new Map(pagesData.pages.map((p) => [p.key, p]));
+  const adsPerPage = new Map<string, number>();
+  for (const a of ads) {
+    const k = normalizePageUrl(a.link_url);
+    if (k) adsPerPage.set(k, (adsPerPage.get(k) ?? 0) + 1);
+  }
+  const pageKeys = [...new Set([...adsPerPage.keys(), ...pagesData.pages.map((p) => p.key)])].sort();
+  const pageLabel = (k: string) => pageInfo.get(k)?.name || k;
+  const productPage = new Map(pagesData.productPages.map((p) => [p.product, p.page_key]));
+
   const meta = metaConfigFromEnv();
   const demo = isDemo();
   const webhookTokenSet = Boolean(process.env.WIAPY_WEBHOOK_TOKEN);
@@ -50,6 +63,8 @@ export default async function ConfigPage({ searchParams }: PageProps<"/configura
           <code className="code" style={{ marginTop: 6 }}>alter table settings add column if not exists ad_tax_percent numeric(5,2) not null default 0;</code>
         </div>
       ) : null}
+      {sp.paginas ? <p className="ok-msg">Páginas salvas.</p> : null}
+      {sp.erro === "paginas" ? <p className="err-msg">Não deu para salvar as páginas. Confira se o banco foi atualizado (trecho &quot;páginas de venda&quot; do supabase/schema.sql).</p> : null}
       {sp.erro === "salvar" ? <p className="err-msg">Não deu para salvar as configurações. Tente de novo.</p> : null}
       {sp.sync === "ok" ? <p className="ok-msg">Meta sincronizado: {sp.n} linhas de anúncio por dia atualizadas.</p> : null}
       {sp.sync === "erro" ? <p className="err-msg">Não deu para sincronizar o Meta: {settings.last_meta_sync_error ?? "erro desconhecido"}</p> : null}
@@ -170,6 +185,77 @@ export default async function ConfigPage({ searchParams }: PageProps<"/configura
         <div style={{ marginTop: 14 }}>
           <button className="btn btn-primary" type="submit">Salvar</button>
         </div>
+      </form>
+
+      <form action={savePagesAction} className="card" id="paginas">
+        <h2>Páginas de venda</h2>
+        <div className="help-box">
+          <p>
+            O painel descobre a página de cada anúncio pelo <strong>link de destino</strong> no Meta (sem as UTMs). Aqui você dá um
+            nome a cada página, junta endereços que são a mesma oferta e liga cada <strong>produto da Wiapy</strong> a uma página,
+            para que vendas sem UTM (ex.: importadas da planilha) também entrem nela.
+          </p>
+        </div>
+        {pagesData.needsMigration ? (
+          <div className="err-msg">
+            Falta atualizar o banco: no Supabase, abra <b>SQL Editor → New query</b>, cole o trecho &quot;páginas de venda&quot; do
+            arquivo <code>supabase/schema.sql</code> e clique em <b>Run</b>. Depois clique no ↻ do Resumo.
+          </div>
+        ) : pageKeys.length === 0 ? (
+          <p className="faint">
+            Nenhuma página detectada ainda. Clique no ↻ do Resumo para buscar o link de destino dos anúncios no Meta.
+          </p>
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table className="t">
+                <thead>
+                  <tr><th className="left">Endereço</th><th>Anúncios</th><th className="left">Nome da página</th><th className="left">Juntar com</th></tr>
+                </thead>
+                <tbody>
+                  {pageKeys.map((k, i) => (
+                    <tr key={k}>
+                      <td className="left name">
+                        <input type="hidden" name={`page_key_${i}`} value={k} />
+                        {k}
+                      </td>
+                      <td>{adsPerPage.get(k) ?? 0}</td>
+                      <td className="left">
+                        <input type="text" name={`page_name_${i}`} defaultValue={pageInfo.get(k)?.name ?? ""} placeholder="Ex.: Decisões em Perspectiva" style={{ width: 230 }} />
+                      </td>
+                      <td className="left">
+                        <select name={`page_merge_${i}`} defaultValue={pageInfo.get(k)?.merge_into ?? ""}>
+                          <option value="">— página própria —</option>
+                          {pageKeys.filter((o) => o !== k).map((o) => <option key={o} value={o}>{pageLabel(o)}</option>)}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <h2 style={{ marginTop: 18 }}>Produtos da Wiapy → página</h2>
+            {productNames.length === 0 ? (
+              <p className="faint">Nenhum produto vendido ainda.</p>
+            ) : (
+              <div className="grid-2">
+                {productNames.map((prod, i) => (
+                  <label className="field" key={prod}>
+                    <input type="hidden" name={`prod_${i}`} value={prod} />
+                    {prod}
+                    <select name={`prod_page_${i}`} defaultValue={productPage.get(prod) ?? ""}>
+                      <option value="">— sem página (vendas sem UTM ficam em &quot;Sem página&quot;) —</option>
+                      {pageKeys.map((o) => <option key={o} value={o}>{pageLabel(o)}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: 14 }}>
+              <button className="btn btn-primary" type="submit">Salvar páginas</button>
+            </div>
+          </>
+        )}
       </form>
 
       <div className="card">

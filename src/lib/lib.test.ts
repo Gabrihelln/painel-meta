@@ -185,3 +185,46 @@ describe("imposto sobre o gasto em anúncios", () => {
     expect(t.roas).toBeCloseTo(2); // ROAS continua igual ao do Meta (faturamento ÷ gasto)
   });
 });
+
+describe("páginas de venda", () => {
+  it("normaliza o endereço da página", async () => {
+    const { normalizePageUrl } = await import("./pages");
+    expect(normalizePageUrl("https://www.MeuSite.com/decisoes/?utm_source=x")).toBe("meusite.com/decisoes");
+    expect(normalizePageUrl("meusite.com")).toBe("meusite.com");
+    expect(normalizePageUrl("")).toBeNull();
+  });
+
+  it("acha o link de destino no criativo", async () => {
+    const { extractCreativeLink } = await import("./pages");
+    expect(extractCreativeLink({ object_story_spec: { link_data: { link: "https://a.com/x" } } })).toBe("https://a.com/x");
+    expect(extractCreativeLink({ object_story_spec: { video_data: { call_to_action: { value: { link: "https://a.com/v" } } } } })).toBe("https://a.com/v");
+    expect(extractCreativeLink({ asset_feed_spec: { link_urls: [{ website_url: "https://a.com/d" }] } })).toBe("https://a.com/d");
+    expect(extractCreativeLink({ object_story_spec: { link_data: { link: "https://facebook.com/page" } } })).toBeNull();
+  });
+
+  it("agrupa gasto e vendas por página, com junção e produto", async () => {
+    const { buildResolver, groupByPage, NO_PAGE } = await import("./pages");
+    const ads = [
+      { ad_id: "a1", ad_name: "A1", adset_id: "s", campaign_id: "c1", status: "ACTIVE", creative_type: "video", thumbnail_url: null, link_url: "https://x.com/p1?utm=1" },
+      { ad_id: "a2", ad_name: "A2", adset_id: "s", campaign_id: "c2", status: "PAUSED", creative_type: "image", thumbnail_url: null, link_url: "https://x.com/p1-b" },
+    ];
+    const pages = [{ key: "x.com/p1-b", name: null, merge_into: "x.com/p1" }, { key: "x.com/p1", name: "Oferta 1", merge_into: null }];
+    const r = buildResolver(ads, pages, [{ product: "Kit", page_key: "x.com/p1" }]);
+    expect(r.ofAd("a2")).toBe("x.com/p1");
+    const ins = ["a1", "a2"].map((ad_id) => ({ date: "2026-11-27", ad_id, account_id: null, campaign_id: ad_id === "a1" ? "c1" : "c2", campaign_name: null, adset_id: "s", adset_name: null, ad_name: null, spend: 50, impressions: 100, reach: 0, link_clicks: 1, landing_page_views: 1, initiate_checkouts: 0, video_3s_views: 0, thruplays: 0 }));
+    const base = { status: "paid", payment_method: "pix", payment_type: "payment", amount_cents: 10000, fee_cents: 0, orderbump_cents: 0, created_at: "2026-11-27T15:00:00Z", updated_at: "2026-11-27T15:00:00Z", customer_name: null, customer_email: null, checkout_id: null, product_titles: null, utm_source: null, utm_medium: null, utm_campaign: null, utm_content: null, utm_term: null, fbc: null, fbp: null };
+    const sales = [
+      { ...base, id: "1", ad_id: "a1", checkout_title: "Kit" },
+      { ...base, id: "2", ad_id: null, checkout_title: "Kit" },
+      { ...base, id: "3", ad_id: null, checkout_title: "Outro" },
+    ];
+    const rows = groupByPage(ins, sales, ads, r, DEFAULT_SETTINGS);
+    const p1 = rows.find((x) => x.id === "x.com/p1")!;
+    expect(p1.name).toBe("Oferta 1");
+    expect(p1.spend).toBe(100);
+    expect(p1.sales).toBe(2);
+    expect(p1.campaigns).toBe(2);
+    expect(p1.active_ads).toBe(1);
+    expect(rows.find((x) => x.id === NO_PAGE)!.sales).toBe(1);
+  });
+});

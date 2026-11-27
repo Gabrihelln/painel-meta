@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AdInfo, AdInsight, Sale, Settings } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
+import type { PageInfo, ProductPage } from "./pages";
 import { addDays, startOfLocalDayUtc } from "./period";
 
 let client: SupabaseClient | null = null;
@@ -113,11 +114,71 @@ export async function upsertInsights(rows: AdInsight[]) {
 }
 
 export async function upsertAds(rows: AdInfo[]) {
+  let withLink = true;
   for (let i = 0; i < rows.length; i += 500) {
-    const chunk = rows.slice(i, i + 500).map((r) => ({ ...r, updated_at: new Date().toISOString() }));
-    const { error } = await db().from("ads").upsert(chunk, { onConflict: "ad_id" });
+    const chunk = rows.slice(i, i + 500).map((r) => {
+      const row: Record<string, unknown> = { ...r, updated_at: new Date().toISOString() };
+      if (!withLink) delete row.link_url;
+      return row;
+    });
+    let { error } = await db().from("ads").upsert(chunk, { onConflict: "ad_id" });
+    if (error && /link_url/.test(error.message)) {
+      // banco ainda sem a coluna link_url (falta rodar a atualização do schema.sql): grava sem ela
+      withLink = false;
+      chunk.forEach((r) => delete r.link_url);
+      ({ error } = await db().from("ads").upsert(chunk, { onConflict: "ad_id" }));
+    }
     if (error) throw new Error(`Supabase: ${error.message}`);
   }
+}
+
+// ---------- páginas de venda ----------
+
+export interface PagesData {
+  pages: PageInfo[];
+  productPages: ProductPage[];
+  /** true quando as tabelas novas ainda não existem no banco. */
+  needsMigration: boolean;
+}
+
+export async function getPagesData(): Promise<PagesData> {
+  const [p, pp] = await Promise.all([
+    db().from("pages").select("key,name,merge_into"),
+    db().from("product_pages").select("product,page_key"),
+  ]);
+  const missing = (e: { message: string } | null) => Boolean(e && /pages|relation|schema cache|does not exist/i.test(e.message));
+  if (missing(p.error) || missing(pp.error)) return { pages: [], productPages: [], needsMigration: true };
+  if (p.error) throw new Error(`Supabase: ${p.error.message}`);
+  if (pp.error) throw new Error(`Supabase: ${pp.error.message}`);
+  return { pages: p.data ?? [], productPages: pp.data ?? [], needsMigration: false };
+}
+
+export async function savePagesData(pages: PageInfo[], productPages: ProductPage[], clearedProducts: string[]) {
+  if (pages.length) {
+    const { error } = await db().from("pages").upsert(pages, { onConflict: "key" });
+    if (error) throw new Error(`Supabase: ${error.message}`);
+  }
+  if (productPages.length) {
+    const { error } = await db().from("product_pages").upsert(productPages, { onConflict: "product" });
+    if (error) throw new Error(`Supabase: ${error.message}`);
+  }
+  if (clearedProducts.length) {
+    const { error } = await db().from("product_pages").delete().in("product", clearedProducts);
+    if (error) throw new Error(`Supabase: ${error.message}`);
+  }
+}
+
+/** Nomes de produtos que já apareceram nas vendas (para ligar produto → página). */
+export async function getProductNames(): Promise<string[]> {
+  const names = new Set<string>();
+  const rows = await selectAll<{ checkout_title: string | null; product_titles: string | null }>((a, b) =>
+    db().from("sales").select("checkout_title,product_titles").range(a, b),
+  );
+  for (const r of rows) {
+    const n = r.checkout_title ?? r.product_titles;
+    if (n) names.add(n);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
 
 export async function utmCoverage(since: string, until: string): Promise<{ total: number; tracked: number; lastSaleAt: string | null }> {

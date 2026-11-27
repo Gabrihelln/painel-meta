@@ -82,6 +82,21 @@ insert into settings (id) values (1) on conflict (id) do nothing;
 -- Atualização (nov/2026): imposto/IOF sobre o gasto em anúncios. Seguro rodar mais de uma vez.
 alter table settings add column if not exists ad_tax_percent numeric(5,2) not null default 0;
 
+-- Atualização (nov/2026): páginas de venda. Seguro rodar mais de uma vez.
+alter table ads add column if not exists link_url text;
+create table if not exists pages (
+  key         text primary key,               -- endereço normalizado, ex.: meusite.com/decisoes
+  name        text,                           -- nome amigável
+  merge_into  text,                           -- junta esta página com outra (key)
+  updated_at  timestamptz not null default now()
+);
+create table if not exists product_pages (
+  product   text primary key,                 -- nome do produto na Wiapy
+  page_key  text not null                     -- página a que as vendas sem UTM desse produto pertencem
+);
+alter table pages enable row level security;
+alter table product_pages enable row level security;
+
 -- Segurança: o painel acessa o banco só pelo servidor (service role).
 -- Bloqueia qualquer acesso público pela chave anon.
 alter table sales enable row level security;

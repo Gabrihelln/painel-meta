@@ -146,6 +146,18 @@ Ele guarda as UTMs do anúncio e as acrescenta aos links do checkout. Se o seu c
 
 ---
 
+## Atualizar o banco depois de novidades
+
+Quando o painel ganha campos novos, o `supabase/schema.sql` recebe trechos marcados como **"Atualização"**. Para aplicar, abra o Supabase → **SQL Editor → New query**, cole o arquivo inteiro e clique em **Run**. Ele pode ser rodado mais de uma vez sem apagar nada.
+
+## Páginas de venda
+
+A aba **Páginas** agrupa campanhas, criativos e vendas por página de vendas:
+
+- Cada anúncio entra na página do **link de destino** cadastrado no Meta (sem as UTMs). Os links são buscados a cada sincronização.
+- Em **Configurações → Páginas de venda** você dá um nome a cada página, junta endereços que são a mesma oferta e liga cada **produto da Wiapy** a uma página. Assim, vendas sem UTM (como as importadas da planilha) também entram nela.
+- O que não for ligado a nenhuma página aparece como **"Sem página identificada"**, e continua contando no total.
+
 ## Importar vendas antigas (planilha da Wiapy)
 
 O webhook só traz vendas novas. Para trazer o histórico, exporte as vendas da Wiapy em Excel e rode, na pasta do projeto:

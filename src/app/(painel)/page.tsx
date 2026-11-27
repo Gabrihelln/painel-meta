@@ -3,10 +3,11 @@ import MetricsTable, { type Col } from "@/components/MetricsTable";
 import PeriodTabs from "@/components/PeriodTabs";
 import StatusFilter, { parseMostrar } from "@/components/StatusFilter";
 import RefreshButton from "@/components/RefreshButton";
+import ProfitChart from "@/components/ProfitChart";
 import { loadAll } from "@/lib/data";
 import { changePct, dateTimeBR, money, num, pct, ratio } from "@/lib/format";
-import { groupBy, profitByDay, summarize } from "@/lib/metrics";
-import { ALL_SINCE, addDays, daysBetween, listDays, localDate, parsePeriod, previousRange, sameTimeYesterdayMs, shortDayLabel } from "@/lib/period";
+import { groupBy, summarize } from "@/lib/metrics";
+import { ALL_SINCE, addDays, daysBetween, localDate, parsePeriod, previousRange, sameTimeYesterdayMs } from "@/lib/period";
 import { requireSession } from "@/lib/session";
 
 const RESUMO_COLS: Col[] = [
@@ -21,25 +22,6 @@ const RESUMO_COLS: Col[] = [
   { key: "ctr", label: "CTR", format: "pct" },
   { key: "situation", label: "Situação", format: "situation" },
 ];
-
-const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-
-function byMonth(days: { date: string; profit: number; revenue: number; spend: number; sales: number }[]) {
-  const map = new Map<string, { key: string; label: string; profit: number; revenue: number; spend: number; sales: number }>();
-  for (const d of days) {
-    const key = d.date.slice(0, 7);
-    let m = map.get(key);
-    if (!m) {
-      m = { key, label: `${MONTHS[Number(key.slice(5, 7)) - 1]}/${key.slice(2, 4)}`, profit: 0, revenue: 0, spend: 0, sales: 0 };
-      map.set(key, m);
-    }
-    m.profit += d.profit;
-    m.revenue += d.revenue;
-    m.spend += d.spend;
-    m.sales += d.sales;
-  }
-  return [...map.values()];
-}
 
 function Change({ now, before, invert = false, label = "vs período anterior" }: { now: number; before: number | undefined; invert?: boolean; label?: string }) {
   if (before === undefined) return <span className="sub">desde o início</span>;
@@ -59,7 +41,6 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
   const range = parsePeriod(sp);
   const isAll = range.key === "todos";
   const prev = isAll ? null : previousRange(range);
-  const today = localDate(new Date());
 
   // "Todos" busca tudo; os outros períodos buscam também o período anterior (comparação)
   // e pelo menos 7 dias para o gráfico.
@@ -107,21 +88,6 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
   const best = creatives[0];
   const worst = [...creatives].sort((a, b) => a.profit - b.profit)[0];
 
-  // gráfico: do início do período (em "Todos", do primeiro dado existente), mínimo 7 dias;
-  // acima de 62 dias agrupa por mês.
-  const firstData = [
-    ...sales.map((s) => localDate(s.created_at)),
-    ...insights.map((i) => i.date),
-  ].reduce((a, b) => (b < a ? b : a), range.until);
-  const chartStart = [isAll ? firstData : range.since, minChartSince].sort()[0];
-  const daily = profitByDay(listDays(chartStart, range.until), insights, sales, settings);
-  const monthly = daily.length > 62;
-  const bars = monthly ? byMonth(daily) : daily.map((d) => ({ ...d, key: d.date, label: shortDayLabel(d.date, today) }));
-  const maxAbs = Math.max(1, ...bars.map((d) => Math.abs(d.profit)));
-  const hasNeg = bars.some((d) => d.profit < 0);
-  const posH = hasNeg ? 110 : 150;
-  const negH = hasNeg ? 40 : 0;
-  const labelEvery = bars.length > 14 ? Math.ceil(bars.length / 10) : 1;
 
   const periodWord =
     range.key === "hoje" ? "hoje"
@@ -196,34 +162,7 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
         </div>
       </div>
 
-      <div className="card">
-        <div className="row-between" style={{ marginBottom: 12 }}>
-          <h2 style={{ margin: 0 }}>{monthly ? "Lucro por mês" : "Lucro por dia"}</h2>
-          <span className="faint">Verde: lucro · Vermelho: prejuízo</span>
-        </div>
-        <div className="bars" style={{ height: posH + negH + 1 }}>
-          {bars.map((d) => (
-            <div className="bar-col" key={d.key} title={`${d.label}: lucro ${money(d.profit)} · faturamento ${money(d.revenue)} · gasto ${money(d.spend)} · ${d.sales} vendas`}>
-              <div className="bar-pos-zone" style={{ height: posH }}>
-                {d.profit >= 0 ? <div className="bar" style={{ height: Math.max(2, (d.profit / maxAbs) * posH) }} /> : null}
-              </div>
-              <div className="bar-axis" />
-              {hasNeg ? (
-                <div className="bar-neg-zone" style={{ height: negH }}>
-                  {d.profit < 0 ? <div className="bar neg" style={{ height: Math.max(2, Math.min(negH, (-d.profit / maxAbs) * posH)) }} /> : null}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-        <div className="bar-labels">
-          {bars.map((d, i) => (
-            <span key={d.key} className={d.profit < 0 ? "neg" : ""}>
-              {i % labelEvery === 0 || i === bars.length - 1 ? d.label : ""}
-            </span>
-          ))}
-        </div>
-      </div>
+      <ProfitChart range={range} insights={insights} sales={sales} settings={settings} />
 
       <div className="card">
         <div className="row-between" style={{ marginBottom: 8 }}>

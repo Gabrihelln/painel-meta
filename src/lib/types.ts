@@ -58,6 +58,8 @@ export interface AdInfo {
   status: string | null;
   creative_type: string | null;
   thumbnail_url: string | null;
+  /** Link de destino do anúncio (página de vendas). */
+  link_url?: string | null;
 }
 
 export interface Settings {
