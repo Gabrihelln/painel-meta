@@ -68,6 +68,7 @@ create table if not exists ads (
 create table if not exists settings (
   id                         integer primary key default 1 check (id = 1),
   tax_percent                numeric(5,2) not null default 0,
+  ad_tax_percent             numeric(5,2) not null default 0,
   fixed_cost_per_sale_cents  integer not null default 0,
   min_spend_to_judge         numeric(10,2) not null default 100,
   roi_pause                  numeric(8,2) not null default 0,
@@ -77,6 +78,9 @@ create table if not exists settings (
   last_meta_sync_error       text
 );
 insert into settings (id) values (1) on conflict (id) do nothing;
+
+-- Atualização (nov/2026): imposto/IOF sobre o gasto em anúncios. Seguro rodar mais de uma vez.
+alter table settings add column if not exists ad_tax_percent numeric(5,2) not null default 0;
 
 -- Segurança: o painel acessa o banco só pelo servidor (service role).
 -- Bloqueia qualquer acesso público pela chave anon.

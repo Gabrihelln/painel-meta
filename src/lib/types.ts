@@ -62,6 +62,8 @@ export interface AdInfo {
 
 export interface Settings {
   tax_percent: number;
+  /** Imposto/IOF cobrado sobre o gasto em anúncios (% somado ao gasto do Meta). */
+  ad_tax_percent: number;
   fixed_cost_per_sale_cents: number;
   min_spend_to_judge: number;
   roi_pause: number;
@@ -73,6 +75,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   tax_percent: 0,
+  ad_tax_percent: 0,
   fixed_cost_per_sale_cents: 0,
   min_spend_to_judge: 100,
   roi_pause: 0,

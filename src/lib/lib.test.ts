@@ -173,3 +173,15 @@ describe("status do anúncio", () => {
     expect(adStatusKey(null)).toBe("desconhecido");
   });
 });
+
+describe("imposto sobre o gasto em anúncios", () => {
+  it("entra no lucro e no ROI", () => {
+    const ins: AdInsight[] = [{ date: "2026-11-27", ad_id: "a", account_id: null, campaign_id: "c", campaign_name: "C", adset_id: "s", adset_name: "S", ad_name: "A", spend: 100, impressions: 1000, reach: 0, link_clicks: 10, landing_page_views: 5, initiate_checkouts: 1, video_3s_views: 0, thruplays: 0 }];
+    const s: Sale = { id: "1", status: "paid", payment_method: "pix", payment_type: "payment", amount_cents: 20000, fee_cents: 0, orderbump_cents: 0, created_at: "2026-11-27T15:00:00Z", updated_at: "2026-11-27T15:00:00Z", customer_name: null, customer_email: null, checkout_id: null, checkout_title: null, product_titles: null, utm_source: null, utm_medium: null, utm_campaign: null, utm_content: "a", utm_term: null, ad_id: "a", fbc: null, fbp: null };
+    const t = summarize(ins, [s], { ...DEFAULT_SETTINGS, ad_tax_percent: 10 });
+    expect(t.ad_taxes).toBeCloseTo(10);
+    expect(t.profit).toBeCloseTo(200 - 100 - 10);
+    expect(t.roi).toBeCloseTo((90 / 110) * 100);
+    expect(t.roas).toBeCloseTo(2); // ROAS continua igual ao do Meta (faturamento ÷ gasto)
+  });
+});

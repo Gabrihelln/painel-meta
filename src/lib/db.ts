@@ -78,6 +78,7 @@ export async function getSettings(): Promise<Settings> {
   if (!data) return DEFAULT_SETTINGS;
   return {
     tax_percent: Number(data.tax_percent),
+    ad_tax_percent: Number(data.ad_tax_percent ?? 0),
     fixed_cost_per_sale_cents: Number(data.fixed_cost_per_sale_cents),
     min_spend_to_judge: Number(data.min_spend_to_judge),
     roi_pause: Number(data.roi_pause),

@@ -18,6 +18,7 @@ export interface Totals {
   fees: number; // reais (taxa Wiapy)
   taxes: number; // reais
   fixed_costs: number; // reais
+  ad_taxes: number; // reais (imposto/IOF sobre o gasto em anúncios)
   profit: number; // reais
 }
 
@@ -53,12 +54,14 @@ export function emptyTotals(): Totals {
   return {
     spend: 0, impressions: 0, reach: 0, link_clicks: 0, landing_page_views: 0,
     initiate_checkouts: 0, video_3s_views: 0, thruplays: 0,
-    sales: 0, revenue: 0, fees: 0, taxes: 0, fixed_costs: 0, profit: 0,
+    sales: 0, revenue: 0, fees: 0, taxes: 0, fixed_costs: 0, ad_taxes: 0, profit: 0,
   };
 }
 
-export function addInsight(t: Totals, i: AdInsight) {
-  t.spend += Number(i.spend) || 0;
+export function addInsight(t: Totals, i: AdInsight, settings: Settings) {
+  const spend = Number(i.spend) || 0;
+  t.spend += spend;
+  t.ad_taxes += (spend * (settings.ad_tax_percent || 0)) / 100;
   t.impressions += i.impressions || 0;
   t.reach += i.reach || 0;
   t.link_clicks += i.link_clicks || 0;
@@ -79,7 +82,7 @@ export function addSale(t: Totals, s: Sale, settings: Settings) {
 }
 
 export function finish(t: Totals): Totals {
-  t.profit = t.revenue - t.fees - t.taxes - t.fixed_costs - t.spend;
+  t.profit = t.revenue - t.fees - t.taxes - t.fixed_costs - t.spend - t.ad_taxes;
   return t;
 }
 
@@ -88,7 +91,7 @@ const div = (a: number, b: number) => (b > 0 ? a / b : null);
 export function derive(t: Totals): Derived {
   return {
     roas: div(t.revenue, t.spend),
-    roi: t.spend > 0 ? (t.profit / t.spend) * 100 : null,
+    roi: t.spend > 0 ? (t.profit / (t.spend + t.ad_taxes)) * 100 : null,
     cpa: t.sales > 0 && t.spend > 0 ? t.spend / t.sales : null,
     ctr: t.impressions > 0 ? (t.link_clicks / t.impressions) * 100 : null,
     cpm: t.impressions > 0 ? (t.spend / t.impressions) * 1000 : null,
@@ -119,7 +122,7 @@ export const SITUATION_LABEL: Record<Situation, string> = {
 
 export function summarize(insights: AdInsight[], sales: Sale[], settings: Settings): Totals & Derived {
   const t = emptyTotals();
-  insights.forEach((i) => addInsight(t, i));
+  insights.forEach((i) => addInsight(t, i, settings));
   sales.forEach((s) => addSale(t, s, settings));
   finish(t);
   return { ...t, ...derive(t) };
@@ -173,7 +176,7 @@ export function groupBy(
 
   for (const i of insights) {
     const k = keyOf(i.ad_id);
-    if (k) addInsight(get(k, i.ad_id).t, i);
+    if (k) addInsight(get(k, i.ad_id).t, i, settings);
   }
   for (const s of sales) {
     if (!s.ad_id) continue;
@@ -214,7 +217,7 @@ export function profitByDay(days: string[], insights: AdInsight[], sales: Sale[]
   const map = new Map(days.map((d) => [d, emptyTotals()]));
   for (const i of insights) {
     const t = map.get(i.date);
-    if (t) addInsight(t, i);
+    if (t) addInsight(t, i, settings);
   }
   for (const s of sales) {
     const t = map.get(localDate(s.created_at));
