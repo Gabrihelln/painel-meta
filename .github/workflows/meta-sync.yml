@@ -1,0 +1,25 @@
+name: Sincronizar Meta Ads
+
+# Chama o painel a cada 15 minutos para puxar gasto e métricas do Meta.
+# Configure em GitHub > Settings > Secrets and variables > Actions:
+#   PAINEL_URL   = https://seu-projeto.vercel.app
+#   CRON_SECRET  = o mesmo valor da variável CRON_SECRET na Vercel
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Chamar sincronização
+        env:
+          PAINEL_URL: ${{ secrets.PAINEL_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$PAINEL_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Configure os secrets PAINEL_URL e CRON_SECRET"; exit 1
+          fi
+          curl --fail-with-body -sS -H "Authorization: Bearer $CRON_SECRET" "$PAINEL_URL/api/cron/meta-sync?dias=3"
