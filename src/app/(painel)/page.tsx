@@ -1,3 +1,5 @@
+import Link from "next/link";
+import MetricsTable, { type Col } from "@/components/MetricsTable";
 import PeriodTabs from "@/components/PeriodTabs";
 import RefreshButton from "@/components/RefreshButton";
 import { loadAll } from "@/lib/data";
@@ -5,6 +7,18 @@ import { changePct, dateTimeBR, money, num, pct, ratio } from "@/lib/format";
 import { groupBy, profitByDay, summarize } from "@/lib/metrics";
 import { ALL_SINCE, addDays, daysBetween, listDays, localDate, parsePeriod, previousRange, sameTimeYesterdayMs, shortDayLabel } from "@/lib/period";
 import { requireSession } from "@/lib/session";
+
+const RESUMO_COLS: Col[] = [
+  { key: "name", label: "Criativo", format: "name" },
+  { key: "spend", label: "Gasto", format: "money" },
+  { key: "sales", label: "Vendas", format: "int" },
+  { key: "revenue", label: "Faturamento", format: "money" },
+  { key: "roas", label: "ROAS", format: "ratio" },
+  { key: "profit", label: "Lucro", format: "profit" },
+  { key: "cpa", label: "CPA", format: "money2" },
+  { key: "ctr", label: "CTR", format: "pct" },
+  { key: "situation", label: "Situação", format: "situation" },
+];
 
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
@@ -73,7 +87,14 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
   const refunds = curSales.filter((s) => s.status === "refunded" || s.status === "chargedback").length;
   const untracked = curSales.filter((s) => s.status === "paid" && !s.ad_id).length;
 
-  const creatives = groupBy("anuncio", curIns, curSales, ads, settings).filter((r) => r.spend > 0);
+  const allCreatives = groupBy("anuncio", curIns, curSales, ads, settings);
+  const creatives = allCreatives.filter((r) => r.spend > 0);
+  // tabela do Resumo: criativos com gasto ou venda no período
+  const creativeRows = allCreatives
+    .filter((r) => r.spend > 0 || r.sales > 0)
+    .map((r) => ({ ...r, show_thumb: true }));
+  const attributedSales = curSales.filter((s) => s.ad_id && creativeRows.some((r) => r.id === s.ad_id));
+  const creativeTotals = summarize(curIns, attributedSales, settings);
   const best = creatives[0];
   const worst = [...creatives].sort((a, b) => a.profit - b.profit)[0];
 
@@ -193,6 +214,21 @@ export default async function ResumoPage({ searchParams }: PageProps<"/">) {
             </span>
           ))}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="row-between" style={{ marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Como está cada criativo</h2>
+          <Link href={`/criativos?${range.query}`} className="faint" style={{ textDecoration: "underline" }}>
+            Ver funil e mais métricas
+          </Link>
+        </div>
+        <MetricsTable
+          columns={RESUMO_COLS}
+          rows={creativeRows}
+          totals={creativeTotals}
+          emptyText="Nenhum anúncio com gasto ou venda neste período."
+        />
       </div>
 
       {untracked > 0 ? (
