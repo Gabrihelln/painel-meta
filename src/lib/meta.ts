@@ -62,8 +62,21 @@ export interface MetaConfig {
   version: string;
 }
 
+/** Remove aspas, espaços, quebras de linha e prefixos colados por engano junto com o token. */
+export function cleanToken(raw: string | undefined): string {
+  let v = (raw ?? "").trim();
+  v = v.replace(/^META_ACCESS_TOKEN\s*=\s*/i, "").replace(/^Bearer\s+/i, "");
+  v = v.replace(/^["'`]+|["'`]+$/g, "");
+  return v.replace(/\s+/g, "");
+}
+
+/** Descreve o token sem expô-lo (para mensagens de erro). */
+export function tokenHint(token: string): string {
+  return `token recebido pelo painel: começa com "${token.slice(0, 3)}", ${token.length} caracteres`;
+}
+
 export function metaConfigFromEnv(): MetaConfig | null {
-  const token = process.env.META_ACCESS_TOKEN?.trim();
+  const token = cleanToken(process.env.META_ACCESS_TOKEN);
   const accounts = (process.env.META_AD_ACCOUNT_IDS ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -73,7 +86,7 @@ export function metaConfigFromEnv(): MetaConfig | null {
   return { token, accounts, version: process.env.META_API_VERSION?.trim() || "v24.0" };
 }
 
-async function getAllPages(url: string): Promise<any[]> {
+async function getAllPages(url: string, token: string): Promise<any[]> {
   const out: any[] = [];
   let next: string | null = url;
   let guard = 0;
@@ -82,7 +95,8 @@ async function getAllPages(url: string): Promise<any[]> {
     const json: any = await res.json().catch(() => ({}));
     if (!res.ok || json.error) {
       const msg = json?.error?.message ?? `HTTP ${res.status}`;
-      throw new Error(`Meta API: ${msg}`);
+      const hint = /token/i.test(msg) ? ` (${tokenHint(token)})` : "";
+      throw new Error(`Meta API: ${msg}${hint}`);
     }
     out.push(...(json.data ?? []));
     next = json.paging?.next ?? null;
@@ -101,7 +115,7 @@ export async function fetchInsights(cfg: MetaConfig, since: string, until: strin
       limit: "500",
       access_token: cfg.token,
     });
-    const data = await getAllPages(`https://graph.facebook.com/${cfg.version}/${acc}/insights?${params}`);
+    const data = await getAllPages(`https://graph.facebook.com/${cfg.version}/${acc}/insights?${params}`, cfg.token);
     rows.push(...data.map(parseInsightRow));
   }
   return rows;
@@ -115,7 +129,7 @@ export async function fetchAds(cfg: MetaConfig): Promise<AdInfo[]> {
       limit: "200",
       access_token: cfg.token,
     });
-    const data = await getAllPages(`https://graph.facebook.com/${cfg.version}/${acc}/ads?${params}`);
+    const data = await getAllPages(`https://graph.facebook.com/${cfg.version}/${acc}/ads?${params}`, cfg.token);
     out.push(...data.map(parseAdRow));
   }
   return out;

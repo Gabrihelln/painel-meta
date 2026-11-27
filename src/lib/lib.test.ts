@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { extractAdId, parseWiapyPayload } from "./wiapy";
-import { parseInsightRow } from "./meta";
+import { cleanToken, parseInsightRow, tokenHint } from "./meta";
 import { groupBy, summarize } from "./metrics";
 import { localDate, parsePeriod, startOfLocalDayUtc } from "./period";
 import { DEFAULT_SETTINGS, type AdInsight, type Sale } from "./types";
@@ -46,6 +46,13 @@ describe("wiapy", () => {
 });
 
 describe("meta", () => {
+  it("limpa o token colado com aspas, espaços ou prefixo", () => {
+    expect(cleanToken('  "EAAabc123"  ')).toBe("EAAabc123");
+    expect(cleanToken("META_ACCESS_TOKEN=EAAabc\n123")).toBe("EAAabc123");
+    expect(cleanToken("Bearer EAAabc123")).toBe("EAAabc123");
+    expect(tokenHint("EAAabc123")).toContain('"EAA", 9 caracteres');
+  });
+
   it("converte uma linha de insights", () => {
     const row = parseInsightRow({
       date_start: "2026-11-27", ad_id: "9", campaign_id: "1", adset_id: "2", ad_name: "A",
